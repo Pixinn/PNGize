@@ -31,9 +31,14 @@
 import os
 import argparse
 import math
+import hashlib
 from PIL import Image
 
-MAGICK_NUMBER = bytes([0x58, 0x54, 0x4f, 0x46, 0x49, 0x4e, 0x46, 0x4f])
+BYTES_PER_PIXEL = 4 #RGBA
+HASH_LEN = 64
+SIZE_LEN = 4
+
+hasher = hashlib.sha512()
 
 # PARSING COMMAND LINE ARGUMENTS
 parser = argparse.ArgumentParser(description="This script converts any file into a PNG image.")
@@ -51,12 +56,13 @@ if not os.path.exists( args.file ):
 # ENCODING
 if not args.extract:
     # PROCESSING
-    # Reading file 
-    BYTES_PER_PIXEL = 4 #RGBA
-    data = bytearray( MAGICK_NUMBER )
+    # Reading file     
     size_data = os.path.getsize( args.file )
     with open(args.file, 'rb') as file_in:
-        data = data + size_data.to_bytes(4,byteorder='little') + bytearray( file_in.read() )
+        data = bytearray( size_data.to_bytes(SIZE_LEN,byteorder='little') + bytearray( file_in.read() ) )
+    # Prepending checksum  
+    hasher.update( data )
+    data = bytearray(hasher.digest() + data)
     # Padding the data
     dim_img = math.ceil( math.sqrt( len(data) / BYTES_PER_PIXEL ) )
     for i in range(dim_img*dim_img*BYTES_PER_PIXEL - len(data) ):
@@ -68,11 +74,20 @@ if not args.extract:
     img.save(args.output)
 
 # EXTRACTING
-else:    
+else:
     raw = Image.open(args.file).tobytes()
-    if raw[ 0:8 ] != MAGICK_NUMBER:
+    # reading data size
+    begin_data = HASH_LEN+SIZE_LEN
+    size_data = int.from_bytes( raw[ HASH_LEN:HASH_LEN+SIZE_LEN ], byteorder='little' )
+    end_data = begin_data + size_data
+    if end_data > len(raw):
         print("This is not a PNGized image!")
         exit(-1)
-    size = int.from_bytes( raw[ 8:12 ], byteorder='little' )
+    # checking hash
+    hasher.update( raw[HASH_LEN:HASH_LEN+SIZE_LEN+size_data])
+    hash = raw[ 0:HASH_LEN ]
+    if hash != hasher.digest():
+        print("This is not a PNGized image!")
+        exit(-1)
     with open(args.output,"wb") as file_out:
-        file_out.write( raw[ 12:12+size ] )
+        file_out.write( raw[ HASH_LEN+SIZE_LEN:HASH_LEN+SIZE_LEN+size_data ] )
