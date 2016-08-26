@@ -49,7 +49,7 @@ if not os.path.exists( args.file ):
     exit(-1)
 
 # ENCODING
-if args.extract == None:
+if not args.extract:
     # PROCESSING
     # Reading file 
     BYTES_PER_PIXEL = 4 #RGBA
