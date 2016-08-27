@@ -20,8 +20,8 @@
 #################################
 #   BYTE ARRAY ENCODED INTO PNG
 #
-#   [ SHA512(DATA_SIZE & DATA) ] [ FILENAME_SIZE ] [  FILENAME  ] [ DATA_SIZE ] [ ....... DATA ....... ] [ PADDING ]
-#    >          8 bytes       <   >    4 bytes  <  >  F_Z bytes < > 4 bytes   < > DATA_SIZE bytes      < > various <   
+#   [ SHA512(DATA_SIZE & DATA) ] [ FILENAME_SIZE ] [  FILENAME UTF8 ] [ DATA_SIZE ] [ ....... DATA ....... ] [ PADDING ]
+#    >          8 bytes       <   >    4 bytes  <  >    F_Z bytes  < > 4 bytes   < > DATA_SIZE bytes      < > various <   
 #                                 | ............................. XORed by SHAS512 ................................| 
 #
 #################################
@@ -59,6 +59,7 @@ def Xoring( data, key ):
 
 
 Hasher = hashlib.sha512()
+Out_filepath = ""
 
 # PARSING COMMAND LINE ARGUMENTS
 parser = argparse.ArgumentParser(description="This script converts any file into a PNG image.")
@@ -67,18 +68,25 @@ parser.add_argument("-o","--output", help="output filename", required=False)
 parser.add_argument("-x","--extract", action='store_true', help="extract file from png", required=False)
 args = parser.parse_args()
 
+
+
 # SANITY
 if not os.path.exists( args.file ):
     Error("File " +  args.file + " does not exist!", -1 )
 
+    
+    
 # ENCODING
 if not args.extract:
     # PROCESSING
+    # Filename into the bytes buffer
+    filename_encoded = bytearray( os.path.basename( args.file ), encoding='utf-8')
+    data = bytearray( len(filename_encoded).to_bytes(SIZE_LEN,byteorder='little') ) + filename_encoded
     # Reading file     
     size_data = os.path.getsize( args.file )
     with open(args.file, 'rb') as file_in:
-        data = bytearray( size_data.to_bytes(SIZE_LEN,byteorder='little') + bytearray( file_in.read() ) )
-    # checksum  
+        data += bytearray( size_data.to_bytes(SIZE_LEN,byteorder='little') + bytearray( file_in.read() ) )
+    # Checksum  
     Hasher.update( data )
     hash = Hasher.digest()
     # Padding the data
@@ -94,32 +102,46 @@ if not args.extract:
             data.append( random.getrandbits(8) )
     # XORing with hash
     data = bytearray(hash) + Xoring( data, hash )
-    # Interpreting as a raw image and saving
+    # Interpreting as a raw image
     size_img = ( dim_img, dim_img )
     img = Image.frombytes('RGBA', size_img, bytes(data) )
+    # Saving
+    if args.output == None:
+        Out_filepath = args.file + ".png"
+    else:
+        Out_filepath = args.output
     # TODO : Test if output folder exists
-    img.save(args.output)
+    img.save(Out_filepath)
 
+    
+    
 # EXTRACTING
 else:
     raw = Image.open(args.file).tobytes()
     hash = raw[:HASH_LEN]
     # Xoring
     raw = Xoring( bytearray(raw[HASH_LEN:]), hash )
-    # reading data size
-    begin_data = SIZE_LEN
-    size_data = int.from_bytes( raw[:SIZE_LEN ], byteorder='little' )
+    # Reading filename
+    size_filename = int.from_bytes( raw[:SIZE_LEN ], byteorder='little' )
+    if args.output == None:
+        Out_filepath = raw[SIZE_LEN:SIZE_LEN+size_filename].decode(encoding='UTF-8')
+    else:
+        Out_filepath = args.output    
+    # Reading data size
+    begin_data_size = SIZE_LEN+size_filename
+    begin_data = 2*SIZE_LEN+size_filename
+    size_data = int.from_bytes( raw[begin_data_size:begin_data ], byteorder='little' )
     end_data = begin_data + size_data
     if end_data > len(raw):
         Error("This is not a PNGized image!", -2 )
 
-    # checking hash
+    # Checking hash
     Hasher.update( raw[:end_data] )
     if hash != Hasher.digest():
         Error("This is not a PNGized image!", -3 )
-    with open(args.output,"wb") as file_out:
+    with open(Out_filepath,"wb") as file_out:
         file_out.write( raw[begin_data:end_data] )
         
-        
-        
-
+    # Done
+    print( Out_filepath + " extracted.")
+           
