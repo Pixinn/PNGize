@@ -38,6 +38,7 @@ from PIL import Image
 BYTES_PER_PIXEL = 4 #RGBA
 HASH_LEN = 64
 SIZE_LEN = 4
+DIM_PNG_MIN = 16
 
 def Error( msg, err_code ):
     print( msg )
@@ -83,8 +84,14 @@ if not args.extract:
     # Padding the data
     random.seed(os.urandom(4))
     dim_img = math.ceil( math.sqrt( len(data) / BYTES_PER_PIXEL ) )
-    for i in range(dim_img*dim_img*BYTES_PER_PIXEL - len(data) ):
+    to_pad = dim_img*dim_img*BYTES_PER_PIXEL - len(data)
+    for i in range( to_pad ):
         data.append( random.getrandbits(8) )
+    if len( data ) < (DIM_PNG_MIN*DIM_PNG_MIN*BYTES_PER_PIXEL):    
+        to_pad = DIM_PNG_MIN*DIM_PNG_MIN*BYTES_PER_PIXEL - len( data )
+        dim_img = DIM_PNG_MIN
+        for i in range( to_pad ):
+            data.append( random.getrandbits(8) )
     # XORing with hash
     data = bytearray(hash) + Xoring( data, hash )
     # Interpreting as a raw image and saving
