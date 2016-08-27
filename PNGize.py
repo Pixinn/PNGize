@@ -20,8 +20,9 @@
 #################################
 #   BYTE ARRAY ENCODED INTO PNG
 #
-#   [ 58 54 4f 46 49 4e 46 4f ] [ DATA_SIZE ] [ ....... DATA ....... ] [ PADDING ]
-#    8 bytes                     4 bytes        DATA_SIZE bytes          various   
+#   [ SHA512(DATA_SIZE & DATA) ] [ DATA_SIZE ] [ ....... DATA ....... ] [ PADDING ]
+#    >>>>>>>> 8 bytes <<<<<<<<<   > 4 bytes <   >>> DATA_SIZE bytes <<< > various <   
+#                                 | .............. XORed by SHAS512 ..............| 
 #
 #################################
 # TODO : Replace the magick number by a checksum on the data
