@@ -32,11 +32,27 @@ import os
 import argparse
 import math
 import hashlib
+import random
 from PIL import Image
 
 BYTES_PER_PIXEL = 4 #RGBA
 HASH_LEN = 64
 SIZE_LEN = 4
+
+
+def xoring( data, key ):
+    xored = 0
+    idx_key = 0
+    len_data = len(data)
+    len_key = len(key)
+    while xored < len_data:
+        data[ xored ] ^= key[ idx_key ]
+        xored += 1
+        idx_key += 1
+        if idx_key == len_key:
+            idx_key = 0
+    return data
+
 
 hasher = hashlib.sha512()
 
@@ -60,13 +76,16 @@ if not args.extract:
     size_data = os.path.getsize( args.file )
     with open(args.file, 'rb') as file_in:
         data = bytearray( size_data.to_bytes(SIZE_LEN,byteorder='little') + bytearray( file_in.read() ) )
-    # Prepending checksum  
+    # checksum  
     hasher.update( data )
-    data = bytearray(hasher.digest() + data)
+    hash = hasher.digest()
     # Padding the data
+    random.seed(os.urandom(4))
     dim_img = math.ceil( math.sqrt( len(data) / BYTES_PER_PIXEL ) )
     for i in range(dim_img*dim_img*BYTES_PER_PIXEL - len(data) ):
-        data.append(0)
+        data.append( random.getrandbits(8) )
+    # XORing with hash
+    data = bytearray(hash) + xoring( data, hash )
     # Interpreting as a raw image and saving
     size_img = ( dim_img, dim_img )
     img = Image.frombytes('RGBA', size_img, bytes(data) )
@@ -76,18 +95,24 @@ if not args.extract:
 # EXTRACTING
 else:
     raw = Image.open(args.file).tobytes()
+    hash = raw[:HASH_LEN]
+    # xoring
+    raw = xoring( bytearray(raw[HASH_LEN:]), hash )
     # reading data size
-    begin_data = HASH_LEN+SIZE_LEN
-    size_data = int.from_bytes( raw[ HASH_LEN:HASH_LEN+SIZE_LEN ], byteorder='little' )
+    begin_data = SIZE_LEN
+    size_data = int.from_bytes( raw[:SIZE_LEN ], byteorder='little' )
     end_data = begin_data + size_data
     if end_data > len(raw):
         print("This is not a PNGized image!")
         exit(-1)
     # checking hash
-    hasher.update( raw[HASH_LEN:HASH_LEN+SIZE_LEN+size_data])
-    hash = raw[ 0:HASH_LEN ]
+    hasher.update( raw[:end_data] )
     if hash != hasher.digest():
         print("This is not a PNGized image!")
         exit(-1)
     with open(args.output,"wb") as file_out:
-        file_out.write( raw[ HASH_LEN+SIZE_LEN:HASH_LEN+SIZE_LEN+size_data ] )
+        file_out.write( raw[begin_data:end_data] )
+        
+        
+        
+
