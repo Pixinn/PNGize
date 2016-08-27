@@ -20,14 +20,13 @@
 #################################
 #   BYTE ARRAY ENCODED INTO PNG
 #
-#   [ SHA512(DATA_SIZE & DATA) ] [ DATA_SIZE ] [ ....... DATA ....... ] [ PADDING ]
-#    >>>>>>>> 8 bytes <<<<<<<<<   > 4 bytes <   >>> DATA_SIZE bytes <<< > various <   
-#                                 | .............. XORed by SHAS512 ..............| 
+#   [ SHA512(DATA_SIZE & DATA) ] [ FILENAME_SIZE ] [  FILENAME  ] [ DATA_SIZE ] [ ....... DATA ....... ] [ PADDING ]
+#    >          8 bytes       <   >    4 bytes  <  >  F_Z bytes < > 4 bytes   < > DATA_SIZE bytes      < > various <   
+#                                 | ............................. XORed by SHAS512 ................................| 
 #
 #################################
-# TODO : Replace the magick number by a checksum on the data
 
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 import os
 import argparse
@@ -40,8 +39,11 @@ BYTES_PER_PIXEL = 4 #RGBA
 HASH_LEN = 64
 SIZE_LEN = 4
 
+def Error( msg, err_code ):
+    print( msg )
+    exit(err_code)
 
-def xoring( data, key ):
+def Xoring( data, key ):
     xored = 0
     idx_key = 0
     len_data = len(data)
@@ -55,20 +57,18 @@ def xoring( data, key ):
     return data
 
 
-hasher = hashlib.sha512()
+Hasher = hashlib.sha512()
 
 # PARSING COMMAND LINE ARGUMENTS
 parser = argparse.ArgumentParser(description="This script converts any file into a PNG image.")
 parser.add_argument("file", help="file to convert")
-parser.add_argument("output", help="output filename")
-# TODO : Real optional arg without parameter!
+parser.add_argument("-o","--output", help="output filename", required=False)
 parser.add_argument("-x","--extract", action='store_true', help="extract file from png", required=False)
 args = parser.parse_args()
 
 # SANITY
 if not os.path.exists( args.file ):
-    print("File " +  args.file + " does not exist!")
-    exit(-1)
+    Error("File " +  args.file + " does not exist!", -1 )
 
 # ENCODING
 if not args.extract:
@@ -78,15 +78,15 @@ if not args.extract:
     with open(args.file, 'rb') as file_in:
         data = bytearray( size_data.to_bytes(SIZE_LEN,byteorder='little') + bytearray( file_in.read() ) )
     # checksum  
-    hasher.update( data )
-    hash = hasher.digest()
+    Hasher.update( data )
+    hash = Hasher.digest()
     # Padding the data
     random.seed(os.urandom(4))
     dim_img = math.ceil( math.sqrt( len(data) / BYTES_PER_PIXEL ) )
     for i in range(dim_img*dim_img*BYTES_PER_PIXEL - len(data) ):
         data.append( random.getrandbits(8) )
     # XORing with hash
-    data = bytearray(hash) + xoring( data, hash )
+    data = bytearray(hash) + Xoring( data, hash )
     # Interpreting as a raw image and saving
     size_img = ( dim_img, dim_img )
     img = Image.frombytes('RGBA', size_img, bytes(data) )
@@ -97,20 +97,19 @@ if not args.extract:
 else:
     raw = Image.open(args.file).tobytes()
     hash = raw[:HASH_LEN]
-    # xoring
-    raw = xoring( bytearray(raw[HASH_LEN:]), hash )
+    # Xoring
+    raw = Xoring( bytearray(raw[HASH_LEN:]), hash )
     # reading data size
     begin_data = SIZE_LEN
     size_data = int.from_bytes( raw[:SIZE_LEN ], byteorder='little' )
     end_data = begin_data + size_data
     if end_data > len(raw):
-        print("This is not a PNGized image!")
-        exit(-1)
+        Error("This is not a PNGized image!", -2 )
+
     # checking hash
-    hasher.update( raw[:end_data] )
-    if hash != hasher.digest():
-        print("This is not a PNGized image!")
-        exit(-1)
+    Hasher.update( raw[:end_data] )
+    if hash != Hasher.digest():
+        Error("This is not a PNGized image!", -3 )
     with open(args.output,"wb") as file_out:
         file_out.write( raw[begin_data:end_data] )
         
