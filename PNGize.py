@@ -1,4 +1,4 @@
-
+#! /usr/bin/env python3
 #
 # pyConvert.py
 # Copyright (C) 2016 Christophe Meneboeuf <christophe@xtof.info>
@@ -26,7 +26,6 @@
 #
 #################################
 
-#!/usr/bin/env python3
 
 import os
 import argparse
