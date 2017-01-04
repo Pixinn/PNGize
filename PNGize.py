@@ -26,7 +26,6 @@ import random
 
 from PIL import Image
 
-import numpy as np
 
 BYTES_PER_PIXEL = 4  # RGBA.
 SIZE_LEN = 4         # Space in bytes used to encode sizes.
@@ -44,26 +43,19 @@ def Xoring(data, key):
   '''Xor the <data> bytearray with the <key> bytearray.
 
   If <key> is smaller than <data>, <key> is repeated enough times to match
-  <data>'s size. Numpy array are used to speed up the computation.
+  <data>'s size.
   '''
-  key_size = len(key)
-  data_size = len(data)
-  iterations = data_size // key_size
-  tail_size = data_size % key_size
-
-  np_data = np.array(data)
-  np_key = np.array(key)
-  start = 0
-  end = key_size
-  for i in range(iterations):
-    np_data[start:end] ^= np_key
-    start += key_size
-    end += key_size
-
-  if tail_size > 0:
-    np_data[start:] ^= np_key[:tail_size]
-
-  return bytearray(np_data.tobytes())
+  xored = 0
+  idx_key = 0
+  len_data = len(data)
+  len_key = len(key)
+  while xored < len_data:
+    data[ xored ] ^= key[ idx_key ]
+    xored += 1
+    idx_key += 1
+    if idx_key == len_key:
+      idx_key = 0
+  return data
 
 
 def ExtractPNGFile(src_path, dst_path, hash_method):
@@ -102,7 +94,7 @@ def ExtractPNGFile(src_path, dst_path, hash_method):
 
   with io.BufferedWriter(open(dst_path, 'wb')) as dst:
     dst.write(raw[cursor:data_end])
-        
+
 
 def EncodeAsPNG(src_path, dst_path, hash_method):
   '''Encode the given file as a PNG.
@@ -176,9 +168,8 @@ if __name__ == '__main__':
   args = parser.parse_args()
   if not os.path.exists(args.file):
     Error('File {} does not exist!'.format(args.file), -1)
-  
+
   if args.extract:
     ExtractPNGFile(args.file, args.output, hashlib.sha512())
   else:
     EncodeAsPNG(args.file, args.output, hashlib.sha512())
-
