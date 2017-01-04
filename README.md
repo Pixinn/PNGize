@@ -14,7 +14,7 @@ Convert any file to a PNG image
 
 # Requirements
 * Python3
-* PIL
+* PIL (or Pillow)
 
 -----------
 
